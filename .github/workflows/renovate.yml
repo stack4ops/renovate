@@ -8,7 +8,7 @@ on:
       debug:
         description: 'Debug'
         type: boolean
-        default: false
+        default: true
   schedule:
     - cron: '0 2 * * 1'
 
