@@ -1,11 +1,5 @@
 {
     "extends": ["config:recommended"],
     "autodiscover": false,
-    "repositories": ["stack4ops/cibuilder"],
-    "repoConfig": {
-    "stack4ops/cibuilder": {
-      "dryRun": "full",
-      "logLevel": "debug"
-    }
-  }
+    "repositories": ["stack4ops/cibuilder"]
 }

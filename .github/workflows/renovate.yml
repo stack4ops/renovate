@@ -1,8 +1,12 @@
-name: Renovate
 on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run?'
+        type: boolean
+        default: true
   schedule:
-    - cron: '0 2 * * 1'    # monday 02:00
-  workflow_dispatch:       # manuell trigger
+    - cron: '0 2 * * 1'
 
 jobs:
   renovate:
@@ -13,3 +17,6 @@ jobs:
         with:
           configurationFile: renovate.json
           token: ${{ secrets.RENOVATE_TOKEN }}
+        env:
+          RENOVATE_DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && 'full' || '' }}
+          LOG_LEVEL: debug
