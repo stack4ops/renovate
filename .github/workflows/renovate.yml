@@ -2,9 +2,14 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Dry run?'
+        description: 'Dry run'
         type: boolean
         default: true
+    inputs:
+      debug:
+        description: 'Debug'
+        type: boolean
+        default: false
   schedule:
     - cron: '0 2 * * 1'
 
@@ -19,4 +24,4 @@ jobs:
           token: ${{ secrets.RENOVATE_TOKEN }}
         env:
           RENOVATE_DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && 'full' || '' }}
-          LOG_LEVEL: debug
+          LOG_LEVEL: ${{ github.event.inputs.debug == 'true' && 'debug' || '' }}
