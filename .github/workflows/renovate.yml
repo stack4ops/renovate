@@ -10,8 +10,8 @@ on:
         description: 'Debug'
         type: boolean
         default: true
-  schedule:
-    - cron: '0 2 * * 1'
+  # schedule:
+  #   - cron: '0 2 * * 1'
 
 jobs:
   renovate:
