@@ -1,0 +1,42 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "stack4ops defaults: Nix flakes, annotated versions, automerge after green checks",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "platformAutomerge": true,
+  "gitIgnoredAuthors": ["nix-hash-fixup@users.noreply.github.com"],
+  "nix": {
+    "enabled": true
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Versions annotated with a '# renovate:' comment on the line above, in Nix files and compose files",
+      "managerFilePatterns": ["/\\.nix$/", "/(^|/)(docker-)?compose\\.ya?ml$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*version\\s*=\\s*\"(?<currentValue>[^\"]+)\";",
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*image:\\s*[^:\\s]+:(?<currentValue>[^\\s@]+)"
+      ],
+      "extractVersionTemplate": "{{#if extractVersion}}{{{extractVersion}}}{{else}}^v?(?<version>.+)${{/if}}"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Annotated versions: patch and minor automerge after a short soak, major stays manual",
+      "matchManagers": ["custom.regex"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "minimumReleaseAge": "3 days",
+      "automerge": true
+    },
+    {
+      "description": "flake.lock inputs, weekly",
+      "matchManagers": ["nix"],
+      "schedule": ["before 6am on monday"],
+      "automerge": true
+    },
+    {
+      "description": "GitHub Actions and reusable workflows, pinned by digest",
+      "matchManagers": ["github-actions"],
+      "automerge": true
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+name: nix-hash-fixup
+# Reusable. Renovate bumps version strings and flake.lock, but cannot compute
+# Nix fixed-output hashes. This recomputes src hash and vendorHash (or
+# cargoHash, npmDepsHash, ...) for the given flake attributes on a Renovate
+# branch and pushes them back. The build and the required check come from
+# the caller's CI on the resulting head commit.
+#
+# Caller:
+#   jobs:
+#     fixup:
+#       if: startsWith(github.head_ref, 'renovate/')
+#       uses: stack4ops/renovate/.github/workflows/nix-hash-fixup.yml@main
+#       with:
+#         attributes: zot-bin
+#       secrets:
+#         token: ${{ secrets.RENOVATE_TOKEN }}
+on:
+  workflow_call:
+    inputs:
+      attributes:
+        description: 'Space-separated flake package attributes to fix up'
+        type: string
+        required: true
+    secrets:
+      token:
+        description: >-
+          Token with contents:write on the calling repo. Not GITHUB_TOKEN:
+          pushes made with it trigger no workflows and no webhooks, so the
+          new head would never get a status and automerge would wait forever.
+        required: true
+
+jobs:
+  fixup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    concurrency:
+      group: nix-hash-fixup-${{ github.repository }}-${{ github.head_ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.token }}
+      - uses: cachix/install-nix-action@v31
+      - name: Recompute fixed-output hashes
+        env:
+          ATTRIBUTES: ${{ inputs.attributes }}
+        run: |
+          for attr in $ATTRIBUTES; do
+            echo "::group::$attr"
+            nix run --inputs-from . nixpkgs#nix-update -- --flake --version=skip "$attr"
+            echo "::endgroup::"
+          done
+      - name: Push if anything changed
+        run: |
+          if git diff --quiet; then
+            echo "hashes already correct"
+            exit 0
+          fi
+          # Must match gitIgnoredAuthors in default.json, or Renovate treats
+          # the branch as edited by someone else and stops maintaining it.
+          git config user.name "nix-hash-fixup"
+          git config user.email "nix-hash-fixup@users.noreply.github.com"
+          git commit -am "fix: update Nix fixed-output hashes"
+          git push

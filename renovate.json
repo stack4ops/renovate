@@ -1,5 +1,8 @@
 {
-    "extends": ["config:recommended"],
-    "autodiscover": false,
-    "repositories": ["stack4ops/cibuilder"]
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "autodiscover": false,
+  "repositories": ["stack4ops/images"],
+  "onboarding": false,
+  "requireConfig": "optional",
+  "binarySource": "install"
 }
