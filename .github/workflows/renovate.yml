@@ -1,7 +1,27 @@
 name: Renovate
+# Two scheduled runs rather than one, so the dependency direction between the
+# repositories is also the order they are processed in:
+#
+#   stack4ops/pkgs    -- bumps the zot version, fixup recomputes the hashes,
+#                        argunix builds, platform automerge lands it on main
+#   stack4ops/images  -- two hours later, lockFileMaintenance moves the
+#                        stack4ops-pkgs input to that new main
+#
+# Two hours is enough for the pkgs build and the automerge to complete, so a
+# zot release propagates all the way to a published image in one night instead
+# of waiting a week for the next lockFileMaintenance window. If the pkgs side
+# has not landed by 04:17, nothing breaks -- the images run simply finds the
+# old main and picks the bump up the following night.
+#
+# Note the minutes: GitHub delays scheduled workflows noticeably at the top of
+# the hour, which is where everyone puts them.
 on:
   workflow_dispatch:
     inputs:
+      repositories:
+        description: 'Repositories to run on (comma-separated, blank = all from renovate.json)'
+        type: string
+        default: ''
       dry_run:
         description: 'Dry run'
         type: boolean
@@ -11,19 +31,48 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '17 2 * * *'
+    - cron: '17 4 * * *'
 
 jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      # RENOVATE_REPOSITORIES overrides `repositories` from renovate.json when
+      # set, and is left unset otherwise -- an empty value would be honoured as
+      # "no repositories" rather than falling back to the file.
+      - name: Select repositories for this run
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          REQUESTED: ${{ github.event.inputs.repositories }}
+        run: |
+          case "$SCHEDULE" in
+            # stack4ops/renovate rides along in the first window: it has no
+            # dependents, and its own pinned action and container digests need
+            # updating like anything else.
+            '17 2 * * *') selected='stack4ops/renovate,stack4ops/pkgs' ;;
+            '17 4 * * *') selected='stack4ops/images' ;;
+            *)            selected="$REQUESTED" ;;
+          esac
+          if [ -n "$selected" ]; then
+            echo "RENOVATE_REPOSITORIES=$selected" >> "$GITHUB_ENV"
+            echo "running on: $selected"
+          else
+            echo "running on every repository in renovate.json"
+          fi
+
       - uses: renovatebot/github-action@v46.3.7
         with:
-          # Global (self-hosted) config: which repos, how tools are installed.
-          # The rules every repo shares live in default.json and are pulled
-          # in per repo with "extends": ["local>stack4ops/renovate"].
-          configurationFile: renovate.json
+          # Global (self-hosted) config: which repos, how tools are
+          # installed. Named config.json, NOT renovate.json: this repository
+          # is itself tracked now, and Renovate would read a root
+          # renovate.json as this repo's own config, where global-only options
+          # like autodiscover are a validation error. renovate.json here is
+          # that repo config; default.json is the shared preset every
+          # repository pulls in with "extends": ["local>stack4ops/renovate"].
+          configurationFile: config.json
           token: ${{ secrets.RENOVATE_TOKEN }}
         env:
           RENOVATE_DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && 'full' || '' }}

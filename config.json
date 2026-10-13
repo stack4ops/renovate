@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "autodiscover": false,
+  "repositories": [
+    "stack4ops/renovate",
+    "stack4ops/pkgs"
+  ],
+  "onboarding": false,
+  "requireConfig": "optional",
+  "binarySource": "install"
+}

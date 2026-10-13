@@ -8,7 +8,7 @@
     "enabled": true
   },
   "lockFileMaintenance": {
-    "description": "nix flake update: moves every input to the newest commit of the branch it already tracks",
+    "description": "nix flake update: moves every input to the newest commit of the branch it already tracks. Weekly is right for a repository whose only input is a nixpkgs release branch; a repository that also consumes another stack4ops flake overrides this to nightly, so a package bump reaches it the same night rather than at the next window.",
     "enabled": true,
     "schedule": ["before 6am on monday"],
     "automerge": true
@@ -34,7 +34,7 @@
       "automerge": true
     },
     {
-      "description": "Flake input switching to a new release branch (e.g. nixos-26.05 -> nixos-26.11): PR only, never automerge",
+      "description": "Flake input switching to a new release branch (e.g. nixos-26.05 -> nixos-26.11): PR only, never automerge. Does not apply to lockFileMaintenance, whose update type is its own.",
       "matchManagers": ["nix"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "automerge": false

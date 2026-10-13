@@ -1,0 +1,49 @@
+name: container-smoke-test
+# Run once by hand before the first Renovate PR lands, then leave it alone.
+#
+# Probing the image locally already answered most of what nix-hash-fixup
+# assumes: bash, git, nix 2.34, tar and gzip are present under
+# /root/.nix-profile/bin, jq is not (nothing needs it), and there is no glibc
+# loader at either standard path -- which is why that job carries no JS
+# actions, actions/checkout included.
+#
+# Two things a local `docker pull` cannot answer, and this can:
+#
+#   1. Can GitHub's runners pull the image WITHOUT credentials? A local pull
+#      may have used a cached opencode login. If the answer is no, this job
+#      fails at the pull step before any step below runs, and the fixup job
+#      needs a `credentials:` block with a read-only pull secret.
+#   2. Is the toolchain on PATH inside a container job? The tools live in a
+#      per-user nix profile, and the runner supplies its own environment to
+#      `docker exec`. If PATH does not carry /root/.nix-profile/bin, the
+#      fixup job's first step adds it -- this confirms whether it has to.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    container:
+      image: registry.opencode.de/oci-community/images/applicative-systems/nix/nix:main@sha256:cc3b04a28fe3a8b4945d6375cb25c96d033b7db8663e28443315284d5d825e4b
+    steps:
+      # `shell: sh` rather than the default bash: bash is in the image, but a
+      # probe should not fail because of what it set out to measure.
+      - name: Toolchain as the runner sees it
+        shell: sh
+        run: |
+          echo "PATH=$PATH"
+          echo "HOME=$HOME  USER=$(id -un) ($(id -u))"
+          echo
+          for t in sh bash git nix tar gzip; do
+            printf '%-6s ' "$t"
+            command -v "$t" || echo 'NOT ON PATH'
+          done
+          echo
+          if command -v nix >/dev/null 2>&1; then
+            nix --version
+            echo "nothing to do: the fixup job's PATH fallback stays dormant"
+          else
+            echo "nix is off PATH here -- the fixup job's fallback to"
+            echo "/root/.nix-profile/bin is doing real work, keep it"
+            ls -l /root/.nix-profile/bin/nix || echo "and the profile is not there either"
+          fi

@@ -1,8 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "autodiscover": false,
-  "repositories": ["stack4ops/images"],
-  "onboarding": false,
-  "requireConfig": "optional",
-  "binarySource": "install"
+  "description": "Repo config for this repository itself, so the pinned action and container digests in .github/workflows get updated. The GLOBAL self-hosted config is config.json -- this file must not contain global-only options such as autodiscover or repositories, which is why the two are separate files.",
+  "extends": ["local>stack4ops/renovate"],
+  "packageRules": [
+    {
+      "description": "No automerge here. This repository holds no Nix outputs and has no CI of its own, so there is no required check to gate on and GitHub would merge immediately. These PRs change the supply chain every other repository builds on, so they get read before they land.",
+      "matchFileNames": [".github/workflows/**"],
+      "automerge": false
+    }
+  ]
 }

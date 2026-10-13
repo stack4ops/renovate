@@ -3,15 +3,23 @@ name: nix-hash-fixup
 # Nix fixed-output hashes. This recomputes src hash and vendorHash (or
 # cargoHash, npmDepsHash, ...) for the given flake attributes on a Renovate
 # branch and pushes them back. The build and the required check come from
-# the caller's CI on the resulting head commit.
+# argunix on the resulting head commit.
 #
-# Caller:
+# Only needed in repositories that actually CONTAIN fixed-output hashes --
+# that is, package derivations. stack4ops/images has none: dockerTools images
+# have no `src` and no vendorHash, and their only dependencies are flake
+# inputs, which Renovate updates completely and correctly through the lock
+# file. Do not wire this workflow into an images repository.
+#
+# Caller (stack4ops/pkgs/.github/workflows/nix-hash-fixup.yml):
+#   name: nix-hash-fixup
+#   on: pull_request
 #   jobs:
 #     fixup:
 #       if: startsWith(github.head_ref, 'renovate/')
 #       uses: stack4ops/renovate/.github/workflows/nix-hash-fixup.yml@main
 #       with:
-#         attributes: zot-bin
+#         attributes: zot
 #       secrets:
 #         token: ${{ secrets.RENOVATE_TOKEN }}
 on:
@@ -32,17 +40,89 @@ on:
 jobs:
   fixup:
     runs-on: ubuntu-latest
+
+    # Nix comes from the image rather than from cachix/install-nix-action, so
+    # this job depends on no third-party action at all.
+    #
+    # Written out literally, not as an input: Renovate's github-actions
+    # manager reads `container.image` as a docker dependency and keeps the
+    # digest current. An ${{ inputs.* }} expression here would be an opaque
+    # string to it, and the pin would rot.
+    #
+    # `:main` is a moving tag -- the digest is what actually pins it, and the
+    # tag is kept only so Renovate knows which stream to follow.
+    #
+    # If the registry turns out to require authentication, add:
+    #   credentials:
+    #     username: ${{ secrets.... }}
+    #     password: ${{ secrets.... }}
+    # Run .github/workflows/container-smoke-test.yml once to find out, and to
+    # confirm the rest of the assumptions this job makes about the image.
+    container:
+      image: registry.opencode.de/oci-community/images/applicative-systems/nix/nix:main@sha256:cc3b04a28fe3a8b4945d6375cb25c96d033b7db8663e28443315284d5d825e4b
+
     permissions:
       contents: read
     concurrency:
       group: nix-hash-fixup-${{ github.repository }}-${{ github.head_ref }}
       cancel-in-progress: true
+
+    env:
+      # `extra-` matters: the bare `experimental-features` would REPLACE
+      # whatever the image's own nix.conf enables, so a future image that
+      # relies on, say, ca-derivations would quietly lose it. This appends.
+      NIX_CONFIG: |
+        extra-experimental-features = nix-command flakes
+
     steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.head_ref }}
-          token: ${{ secrets.token }}
-      - uses: cachix/install-nix-action@v31
+      # Measured on this image: no dynamic loader at either
+      # /lib64/ld-linux-x86-64.so.2 or /lib/ld-linux-x86-64.so.2. GitHub's own
+      # glibc-linked node therefore cannot start, so every JS action fails --
+      # including actions/checkout. This job uses no other action, so git
+      # replaces it outright and the image stays minimal.
+      #
+      # The image ships bash, git, nix 2.34, tar and gzip under
+      # /root/.nix-profile/bin (no jq, which nothing here needs). Both checks
+      # below are insurance rather than fixes: `:main` is a moving tag, and a
+      # rebuilt image could drop a tool or land it off PATH.
+      - name: Verify the image toolchain
+        run: |
+          profile=/root/.nix-profile/bin
+          if ! command -v nix >/dev/null 2>&1 && [ -x "$profile/nix" ]; then
+            echo "nix not on PATH, adding $profile"
+            echo "$profile" >> "$GITHUB_PATH"
+            export PATH="$profile:$PATH"
+          fi
+          command -v nix >/dev/null 2>&1 || {
+            echo "::error::no nix in this image -- PATH is $PATH"
+            exit 1
+          }
+          nix --version
+
+          if command -v git >/dev/null 2>&1; then
+            git --version
+          else
+            # Resolved through the global flake registry, not the repository's
+            # pin: the repository is not cloned yet, which is what needs git.
+            echo "no git in the image, taking it from nixpkgs"
+            echo "$(nix build --no-link --print-out-paths nixpkgs#git)/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Check out the Renovate branch
+        env:
+          TOKEN: ${{ secrets.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.head_ref }}
+        run: |
+          git init -q .
+          git config --global --add safe.directory "$PWD"
+          git config --global init.defaultBranch main
+          git remote add origin "https://x-access-token:$TOKEN@github.com/$REPO.git"
+          # Not shallow: a shallow clone cannot always push back.
+          git fetch -q --no-tags origin "+refs/heads/$REF:refs/remotes/origin/$REF"
+          git checkout -q -B "$REF" "refs/remotes/origin/$REF"
+          git log -1 --format='on %h %s'
+
       - name: Recompute fixed-output hashes
         env:
           ATTRIBUTES: ${{ inputs.attributes }}
@@ -52,15 +132,19 @@ jobs:
             nix run --inputs-from . nixpkgs#nix-update -- --flake --version=skip "$attr"
             echo "::endgroup::"
           done
+
       - name: Push if anything changed
+        env:
+          REF: ${{ github.head_ref }}
         run: |
           if git diff --quiet; then
             echo "hashes already correct"
             exit 0
           fi
+          git --no-pager diff --stat
           # Must match gitIgnoredAuthors in default.json, or Renovate treats
           # the branch as edited by someone else and stops maintaining it.
           git config user.name "nix-hash-fixup"
           git config user.email "nix-hash-fixup@users.noreply.github.com"
-          git commit -am "fix: update Nix fixed-output hashes"
-          git push
+          git commit -qam "fix: update Nix fixed-output hashes"
+          git push -q origin "HEAD:refs/heads/$REF"
