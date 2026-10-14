@@ -38,7 +38,7 @@ jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # RENOVATE_REPOSITORIES overrides `repositories` from renovate.json when
       # set, and is left unset otherwise -- an empty value would be honoured as
