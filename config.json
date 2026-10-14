@@ -3,7 +3,8 @@
   "autodiscover": false,
   "repositories": [
     "stack4ops/renovate",
-    "stack4ops/pkgs"
+    "stack4ops/pkgs",
+    "stack4ops/images"
   ],
   "onboarding": false,
   "requireConfig": "optional",
