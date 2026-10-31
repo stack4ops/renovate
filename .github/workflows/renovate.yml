@@ -63,7 +63,7 @@ jobs:
             echo "running on every repository in renovate.json"
           fi
 
-      - uses: renovatebot/github-action@v46.3.7
+      - uses: renovatebot/github-action@43b963bf5dd5e57f1f95c59765a018d782870211 # v46.3.11
         with:
           # Global (self-hosted) config: which repos, how tools are
           # installed. Named config.json, NOT renovate.json: this repository
